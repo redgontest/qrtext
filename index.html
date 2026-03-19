@@ -799,7 +799,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(location.search);
   const tid = params.get('training');
   if (tid) {
-    openAttInputByParam(tid);
+    // URL에 포함된 API 정보 복원 (base64 디코딩)
+    let urlSbUrl = '', urlSbKey = '';
+    try {
+      if (params.get('su')) urlSbUrl = decodeURIComponent(escape(atob(params.get('su'))));
+      if (params.get('sk')) urlSbKey = decodeURIComponent(escape(atob(params.get('sk'))));
+    } catch(e) {}
+    openAttInputByParam(tid, urlSbUrl, urlSbKey);
   } else {
     if (SUPABASE_URL && SUPABASE_KEY) {
       loadTrainings();
@@ -997,9 +1003,18 @@ async function toggleTraining() {
 // ══════════════════════════════════════════
 //  QR CODE
 // ══════════════════════════════════════════
+function buildQRUrl() {
+  // API 정보를 base64로 인코딩하여 URL에 포함 → 모바일에서 설정 없이 작동
+  const base = location.origin + location.pathname;
+  const params = new URLSearchParams({ training: selectedTraining.id });
+  if (SUPABASE_URL) params.set('su', btoa(unescape(encodeURIComponent(SUPABASE_URL))));
+  if (SUPABASE_KEY) params.set('sk', btoa(unescape(encodeURIComponent(SUPABASE_KEY))));
+  return base + '?' + params.toString();
+}
+
 function generateQR() {
   if (!selectedTraining) return;
-  const url = `${location.origin}${location.pathname}?training=${selectedTraining.id}`;
+  const url = buildQRUrl();
   document.getElementById('qr-url-box').textContent = url;
   document.getElementById('qr-url-box').style.display = 'block';
 
@@ -1023,14 +1038,14 @@ function downloadQR() {
   const canvas = document.querySelector('#qrcode canvas');
   if (!canvas) { toast('QR을 먼저 생성하세요'); return; }
   const link = document.createElement('a');
-  link.download = `QR_${selectedTraining?.name || 'attendance'}.png`;
+  link.download = 'QR_' + (selectedTraining ? selectedTraining.name : 'attendance') + '.png';
   link.href = canvas.toDataURL();
   link.click();
 }
 
 function copyURL() {
   if (!selectedTraining) return;
-  const url = `${location.origin}${location.pathname}?training=${selectedTraining.id}`;
+  const url = buildQRUrl();
   navigator.clipboard.writeText(url).then(() => toast('URL이 복사되었습니다'));
 }
 
@@ -1102,29 +1117,55 @@ function openAttInputPreview() {
   document.getElementById('att-input-page').classList.add('show');
 }
 
-async function openAttInputByParam(trainingId) {
-  // QR 코드로 접속했을 때 출석 입력 페이지 바로 열기
-  if (SUPABASE_URL && SUPABASE_KEY) {
-    try {
-      const data = await sbFetch(`/trainings?id=eq.${trainingId}`);
-      const t = data?.[0];
-      if (t) {
-        selectedTraining = t;
-        document.getElementById('aip-title').textContent = t.name;
-        const dateStr = new Date(t.training_date).toLocaleString('ko-KR');
-        document.getElementById('aip-meta').textContent = `${dateStr}${t.location ? ' · ' + t.location : ''}`;
-        document.getElementById('att-input-page').classList.add('show');
-        document.getElementById('header').style.display = 'none';
-        document.getElementById('app').style.display = 'none';
+async function openAttInputByParam(trainingId, urlSbUrl, urlSbKey) {
+  // 헤더/앱 숨기고 출석 입력 전용 화면으로 전환
+  document.getElementById('header').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('att-input-page').classList.add('show');
+
+  // URL에 포함된 API 정보가 있으면 우선 사용 (모바일 접속용)
+  const sbUrl = urlSbUrl || SUPABASE_URL;
+  const sbKey = urlSbKey || SUPABASE_KEY;
+
+  // 로딩 표시
+  document.getElementById('aip-title').textContent = '교육 정보 불러오는 중...';
+  document.getElementById('aip-meta').textContent = '';
+
+  if (!sbUrl || !sbKey) {
+    // API 정보가 전혀 없으면 training_id만으로 최소 표시
+    selectedTraining = { id: trainingId, status: 'open' };
+    document.getElementById('aip-title').textContent = '출석 체크';
+    document.getElementById('aip-meta').textContent = 'QR 코드로 접속하셨습니다';
+    return;
+  }
+
+  try {
+    const res = await fetch(`${sbUrl}/rest/v1/trainings?id=eq.${trainingId}`, {
+      headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}` }
+    });
+    const data = await res.json();
+    const t = data?.[0];
+    if (t) {
+      selectedTraining = t;
+      // API 정보를 로컬에도 저장 (이후 submitAttendance에서 사용)
+      SUPABASE_URL = sbUrl;
+      SUPABASE_KEY = sbKey;
+      document.getElementById('aip-title').textContent = t.name;
+      const dateStr = new Date(t.training_date).toLocaleString('ko-KR');
+      document.getElementById('aip-meta').textContent = `${dateStr}${t.location ? ' · ' + t.location : ''}`;
+      if (t.status === 'closed') {
+        showAipResult('error', '이 교육은 출석이 마감되었습니다');
+        document.querySelector('.aip-submit').disabled = true;
+        document.querySelector('.aip-submit').style.opacity = '0.4';
       }
-    } catch(e) {
-      // API 없으면 설정 요청
-      openSettings();
+    } else {
+      document.getElementById('aip-title').textContent = '교육을 찾을 수 없습니다';
+      document.getElementById('aip-meta').textContent = 'QR 코드가 올바른지 확인하세요';
     }
-  } else {
-    // API 설정 없으면 훈련 ID만 임시 저장 후 설정 열기
-    selectedTraining = { id: trainingId };
-    openSettings();
+  } catch(e) {
+    selectedTraining = { id: trainingId, status: 'open' };
+    document.getElementById('aip-title').textContent = '출석 체크';
+    document.getElementById('aip-meta').textContent = '네트워크 오류 - 입력 후 제출하면 재시도됩니다';
   }
 }
 
