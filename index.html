@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>강원소방 QR 출석관리</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+
+  :root {
+    --red: #D32F2F;
+    --red-dark: #B71C1C;
+    --red-light: #FFCDD2;
+    --red-mid: #EF5350;
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --surface3: #2e2e2e;
+    --border: #333;
+    --text: #f0f0f0;
+    --text-dim: #999;
+    --text-muted: #666;
+    --green: #4CAF50;
+    --yellow: #FFC107;
+    --radius: 8px;
+    --font: 'Noto Sans KR', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 13px;
+  }
+
+  /* ── HEADER ── */
+  #header {
+    background: var(--red-dark);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px;
+    height: 48px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  }
+  #header .logo { font-size: 18px; }
+  #header h1 { font-size: 14px; font-weight: 700; letter-spacing: .5px; flex:1; }
+  #btn-settings {
+    background: rgba(255,255,255,.15);
+    border: none;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: var(--font);
+  }
+  #btn-settings:hover { background: rgba(255,255,255,.25); }
+
+  /* ── MAIN LAYOUT ── */
+  #app {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    height: calc(100vh - 48px);
+    overflow: hidden;
+  }
+
+  /* ── LEFT PANEL (교육 목록) ── */
+  #left-panel {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #left-header {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface2);
+  }
+  #left-header span { font-weight: 700; font-size: 12px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; }
+  #training-count {
+    background: var(--red);
+    color: #fff;
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  #search-box {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  #search-box input {
+    width: 100%;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font);
+  }
+  #search-box input:focus { outline: none; border-color: var(--red); }
+
+  #training-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+  #training-list::-webkit-scrollbar { width: 4px; }
+  #training-list::-webkit-scrollbar-track { background: transparent; }
+  #training-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .training-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all .15s;
+    position: relative;
+  }
+  .training-item:hover { border-color: var(--red); background: var(--surface3); }
+  .training-item.active { border-color: var(--red); background: rgba(211,47,47,.1); }
+  .training-item .ti-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .training-item .ti-date { font-size: 11px; color: var(--text-dim); }
+  .training-item .ti-stats {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .ti-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .ti-badge.total { background: var(--surface3); color: var(--text-dim); }
+  .ti-badge.present { background: rgba(76,175,80,.2); color: #81C784; }
+  .ti-badge.open { background: rgba(76,175,80,.15); color: #81C784; border: 1px solid rgba(76,175,80,.3); }
+  .ti-badge.closed { background: rgba(153,153,153,.15); color: var(--text-dim); border: 1px solid var(--border); }
+
+  .training-item .ti-del {
+    position: absolute;
+    top: 6px; right: 6px;
+    background: none; border: none;
+    color: var(--text-muted);
+    cursor: pointer; font-size: 14px;
+    line-height: 1;
+    display: none;
+  }
+  .training-item:hover .ti-del { display: block; }
+  .training-item .ti-del:hover { color: var(--red); }
+
+  /* ── RIGHT PANEL ── */
+  #right-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* ── RIGHT TOP: 교육 등록 ── */
+  #reg-section {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-title::before {
+    content: '';
+    display: block;
+    width: 3px;
+    height: 12px;
+    background: var(--red);
+    border-radius: 2px;
+  }
+  #reg-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 8px;
+    align-items: end;
+  }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 11px; color: var(--text-dim); }
+  .form-group input, .form-group select, .form-group textarea {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 7px 10px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font);
+    transition: border-color .15s;
+  }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--red); }
+  .form-group select option { background: var(--surface2); }
+
+  .btn-primary {
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: background .15s;
+    white-space: nowrap;
+    height: 34px;
+  }
+  .btn-primary:hover { background: var(--red-dark); }
+  .btn-secondary {
+    background: var(--surface3);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .btn-secondary:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── RIGHT MID: QR 생성 ── */
+  #qr-section {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+  }
+  #qr-content {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  #qr-info { flex: 1; }
+  #qr-training-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  #qr-training-meta { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+  #qr-url-box {
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    word-break: break-all;
+    display: none;
+  }
+  #qr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  #qr-placeholder {
+    width: 100%;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  #qr-display-area {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  #qrcode-wrapper {
+    background: #fff;
+    padding: 8px;
+    border-radius: 6px;
+    display: none;
+    flex-shrink: 0;
+  }
+  #qrcode-wrapper canvas, #qrcode-wrapper img { display: block; }
+
+  /* ── RIGHT BOTTOM: 출석 현황 ── */
+  #attendance-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 12px 16px;
+  }
+  #att-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  #att-stats {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .stat-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    text-align: center;
+    min-width: 70px;
+  }
+  .stat-card .sc-num { font-size: 20px; font-weight: 900; line-height: 1; }
+  .stat-card .sc-label { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .stat-card.sc-total .sc-num { color: var(--text); }
+  .stat-card.sc-present .sc-num { color: #81C784; }
+  .stat-card.sc-rate .sc-num { color: var(--yellow); }
+
+  #att-table-wrap {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  #att-table-wrap::-webkit-scrollbar { width: 4px; }
+  #att-table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    background: var(--surface2);
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    letter-spacing: .5px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+  }
+  tbody tr { border-bottom: 1px solid rgba(255,255,255,.04); transition: background .1s; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td { padding: 8px 12px; font-size: 12px; }
+  .badge-present { background: rgba(76,175,80,.2); color: #81C784; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+  .badge-absent { background: rgba(153,153,153,.1); color: var(--text-muted); padding: 2px 8px; border-radius: 3px; font-size: 11px; }
+
+  /* ── NO SELECTION STATE ── */
+  #no-selection {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    gap: 8px;
+  }
+  #no-selection .ns-icon { font-size: 40px; opacity: .3; }
+  #no-selection p { font-size: 13px; }
+
+  /* ── MODAL: API 설정 / 출석 입력 페이지 ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.8);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    width: 500px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+  }
+  .modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .modal-close {
+    position: absolute; top: 16px; right: 16px;
+    background: none; border: none; color: var(--text-dim);
+    font-size: 18px; cursor: pointer; line-height: 1;
+  }
+  .modal-close:hover { color: var(--text); }
+  .modal .form-group { margin-bottom: 12px; }
+  .modal .form-group input, .modal .form-group textarea {
+    width: 100%;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--font);
+  }
+  .modal .form-group input:focus, .modal .form-group textarea:focus { outline: none; border-color: var(--red); }
+  .modal .form-group textarea { resize: vertical; min-height: 80px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .schema-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px;
+    font-size: 11px;
+    font-family: monospace;
+    color: #81C784;
+    white-space: pre;
+    overflow-x: auto;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+  }
+  .alert { padding: 10px 12px; border-radius: 4px; font-size: 12px; margin-bottom: 12px; }
+  .alert.info { background: rgba(33,150,243,.15); border: 1px solid rgba(33,150,243,.3); color: #90CAF9; }
+  .alert.success { background: rgba(76,175,80,.15); border: 1px solid rgba(76,175,80,.3); color: #A5D6A7; }
+  .alert.error { background: rgba(211,47,47,.15); border: 1px solid rgba(211,47,47,.3); color: #EF9A9A; }
+
+  /* ── ATTENDANCE INPUT PAGE (QR 링크로 접속) ── */
+  #att-input-page {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 2000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #att-input-page.show { display: flex; }
+  .aip-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    width: 100%;
+    max-width: 420px;
+  }
+  .aip-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .aip-logo .fire { font-size: 28px; }
+  .aip-logo h2 { font-size: 16px; font-weight: 900; color: var(--red); }
+  .aip-training-info {
+    background: rgba(211,47,47,.1);
+    border: 1px solid rgba(211,47,47,.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+  }
+  .aip-training-info h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .aip-training-info p { font-size: 12px; color: var(--text-dim); }
+  .aip-form { display: flex; flex-direction: column; gap: 10px; }
+  .aip-form input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: var(--font);
+    width: 100%;
+  }
+  .aip-form input:focus { outline: none; border-color: var(--red); }
+  .aip-submit {
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: var(--font);
+    cursor: pointer;
+    width: 100%;
+    transition: background .15s;
+    margin-top: 4px;
+  }
+  .aip-submit:hover { background: var(--red-dark); }
+  #aip-result {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    display: none;
+  }
+  #aip-result.success { background: rgba(76,175,80,.2); color: #A5D6A7; border: 1px solid rgba(76,175,80,.3); }
+  #aip-result.error { background: rgba(211,47,47,.2); color: #EF9A9A; border: 1px solid rgba(211,47,47,.3); }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    z-index: 9999;
+    transition: transform .3s;
+    pointer-events: none;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    #left-panel { max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
+    #reg-form { grid-template-columns: 1fr 1fr; }
+    #reg-form .span2 { grid-column: span 2; }
+  }
+
+  /* ── STATUS DOT ── */
+  .status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-right: 4px;
+  }
+  .status-dot.open { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.closed { background: var(--text-muted); }
+
+  /* loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .tag-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <span class="logo">🔥</span>
+  <h1>강원소방본부 QR 출석관리 시스템</h1>
+  <button id="btn-settings" onclick="openSettings()">⚙ API 설정</button>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+
+  <!-- ── LEFT: 교육 목록 ── -->
+  <div id="left-panel">
+    <div id="left-header">
+      <span>교육 목록</span>
+      <span id="training-count">0</span>
+    </div>
+    <div id="search-box">
+      <input type="text" id="search-input" placeholder="교육명 검색..." oninput="filterTrainings()" />
+    </div>
+    <div id="training-list">
+      <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:12px;">
+        API 설정 후 교육을 등록하세요
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT ── -->
+  <div id="right-panel">
+
+    <!-- TOP: 교육 등록 -->
+    <div id="reg-section">
+      <div class="section-title">교육 등록</div>
+      <div id="reg-form">
+        <div class="form-group">
+          <label>교육명 *</label>
+          <input type="text" id="reg-name" placeholder="예) 화재진압 기본교육" />
+        </div>
+        <div class="form-group">
+          <label>교육일시 *</label>
+          <input type="datetime-local" id="reg-date" />
+        </div>
+        <div class="form-group">
+          <label>장소</label>
+          <input type="text" id="reg-location" placeholder="예) 춘천소방서 훈련장" />
+        </div>
+        <button class="btn-primary" onclick="createTraining()">
+          + 등록
+        </button>
+      </div>
+    </div>
+
+    <!-- MID: QR 생성 -->
+    <div id="qr-section">
+      <div class="section-title">QR 코드 생성</div>
+      <div id="qr-content">
+        <div id="qr-info">
+          <div id="qr-placeholder">← 좌측 목록에서 교육을 선택하세요</div>
+          <div id="qr-main" style="display:none">
+            <div id="qr-training-name"></div>
+            <div id="qr-training-meta"></div>
+            <div id="qr-url-box"></div>
+            <div id="qr-actions">
+              <button class="btn-secondary" onclick="generateQR()">🔲 QR 생성</button>
+              <button class="btn-secondary" onclick="downloadQR()">⬇ 다운로드</button>
+              <button class="btn-secondary" onclick="copyURL()">🔗 URL 복사</button>
+              <button class="btn-secondary" onclick="toggleTraining()" id="btn-toggle-status">⏸ 마감</button>
+              <button class="btn-secondary" onclick="openAttInputPreview()">👁 입력페이지 미리보기</button>
+            </div>
+          </div>
+        </div>
+        <div id="qr-display-area">
+          <div id="qrcode-wrapper"><div id="qrcode"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM: 출석 현황 -->
+    <div id="attendance-section">
+      <div id="no-selection">
+        <div class="ns-icon">📋</div>
+        <p>교육을 선택하면 출석 현황이 표시됩니다</p>
+      </div>
+      <div id="att-main" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
+        <div id="att-header">
+          <div class="section-title" style="margin-bottom:0">출석 현황</div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn-secondary" style="font-size:11px;padding:5px 10px;" onclick="loadAttendance()">🔄 새로고침</button>
+            <button class="btn-secondary" style="font-size:11px;padding:5px 10px;" onclick="exportCSV()">📥 CSV 내보내기</button>
+          </div>
+        </div>
+        <div id="att-stats">
+          <div class="stat-card sc-total"><div class="sc-num" id="stat-total">0</div><div class="sc-label">등록</div></div>
+          <div class="stat-card sc-present"><div class="sc-num" id="stat-present">0</div><div class="sc-label">출석</div></div>
+          <div class="stat-card sc-rate"><div class="sc-num" id="stat-rate">0%</div><div class="sc-label">출석률</div></div>
+        </div>
+        <div id="att-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>이름</th>
+                <th>소속</th>
+                <th>계급</th>
+                <th>출석시간</th>
+                <th>상태</th>
+              </tr>
+            </thead>
+            <tbody id="att-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 출석 입력 페이지 (QR 접속용 / 미리보기용) ── -->
+<div id="att-input-page">
+  <div class="aip-card">
+    <div class="aip-logo">
+      <span class="fire">🔥</span>
+      <h2>강원소방본부</h2>
+    </div>
+    <div class="aip-training-info">
+      <h3 id="aip-title">교육명</h3>
+      <p id="aip-meta">교육일시 | 장소</p>
+    </div>
+    <div class="aip-form">
+      <input type="text" id="aip-name" placeholder="이름" />
+      <input type="text" id="aip-dept" placeholder="소속 (예: 춘천소방서)" />
+      <input type="text" id="aip-rank" placeholder="계급 (예: 소방사)" />
+      <input type="text" id="aip-id" placeholder="사번 (선택)" />
+      <button class="aip-submit" onclick="submitAttendance()">✅ 출석 확인</button>
+    </div>
+    <div id="aip-result"></div>
+    <div style="text-align:center;margin-top:16px;">
+      <button class="btn-secondary" onclick="closeAttInputPage()" style="font-size:12px;">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── API 설정 모달 ── -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeSettings()">✕</button>
+    <h2>⚙️ Supabase API 설정</h2>
+
+    <div class="alert info">
+      아래 SQL을 Supabase SQL Editor에서 실행한 후 API 정보를 입력하세요.
+    </div>
+
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:700;">📋 Supabase 스키마 SQL</div>
+    <div class="schema-box" id="schema-sql"></div>
+    <button class="btn-secondary" style="font-size:11px;margin-bottom:14px;" onclick="copySchema()">📋 SQL 복사</button>
+
+    <div class="form-group">
+      <label style="font-size:12px;color:var(--text-dim);">Supabase Project URL</label>
+      <input type="text" id="cfg-url" placeholder="https://xxxxxxxxxxxx.supabase.co" />
+    </div>
+    <div class="form-group">
+      <label style="font-size:12px;color:var(--text-dim);">Supabase Anon Key</label>
+      <input type="text" id="cfg-key" placeholder="eyJhbGciOi..." />
+    </div>
+    <div id="cfg-status"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="testConnection()">🔗 연결 테스트</button>
+      <button class="btn-primary" onclick="saveSettings()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+let SUPABASE_URL = localStorage.getItem('sb_url') || '';
+let SUPABASE_KEY = localStorage.getItem('sb_key') || '';
+let trainings = [];
+let selectedTraining = null;
+let attendances = [];
+let qrInstance = null;
+
+const SCHEMA_SQL = `-- 강원소방본부 QR 출석관리 시스템
+-- Supabase SQL Editor에서 실행하세요
+
+-- 1. 교육 테이블
+CREATE TABLE IF NOT EXISTS trainings (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  training_date TIMESTAMPTZ NOT NULL,
+  location    TEXT,
+  status      TEXT DEFAULT 'open' CHECK (status IN ('open','closed')),
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. 출석 테이블
+CREATE TABLE IF NOT EXISTS attendances (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  training_id UUID REFERENCES trainings(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  department  TEXT,
+  rank        TEXT,
+  employee_id TEXT,
+  checked_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(training_id, name, department)
+);
+
+-- 3. Row Level Security (선택사항)
+ALTER TABLE trainings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attendances ENABLE ROW LEVEL SECURITY;
+
+-- 익명 접근 허용 정책 (간편 설정용)
+CREATE POLICY "Allow all for trainings"
+  ON trainings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for attendances"
+  ON attendances FOR ALL USING (true) WITH CHECK (true);
+`;
+
+// ══════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('schema-sql').textContent = SCHEMA_SQL;
+  setDefaultDate();
+
+  // URL 파라미터로 출석 입력 페이지 자동 열기
+  const params = new URLSearchParams(location.search);
+  const tid = params.get('training');
+  if (tid) {
+    openAttInputByParam(tid);
+  } else {
+    if (SUPABASE_URL && SUPABASE_KEY) {
+      loadTrainings();
+    } else {
+      openSettings();
+    }
+  }
+});
+
+function setDefaultDate() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  document.getElementById('reg-date').value = now.toISOString().slice(0,16);
+}
+
+// ══════════════════════════════════════════
+//  SUPABASE API
+// ══════════════════════════════════════════
+async function sbFetch(path, method='GET', body=null) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    toast('API 설정이 필요합니다');
+    openSettings();
+    throw new Error('No API config');
+  }
+  const opts = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Prefer': method === 'POST' ? 'return=representation' : ''
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.message || res.statusText);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+// ══════════════════════════════════════════
+//  SETTINGS
+// ══════════════════════════════════════════
+function openSettings() {
+  document.getElementById('cfg-url').value = SUPABASE_URL;
+  document.getElementById('cfg-key').value = SUPABASE_KEY;
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+function saveSettings() {
+  SUPABASE_URL = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
+  SUPABASE_KEY = document.getElementById('cfg-key').value.trim();
+  localStorage.setItem('sb_url', SUPABASE_URL);
+  localStorage.setItem('sb_key', SUPABASE_KEY);
+  closeSettings();
+  toast('설정이 저장되었습니다');
+  loadTrainings();
+}
+async function testConnection() {
+  const url = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
+  const key = document.getElementById('cfg-key').value.trim();
+  const el = document.getElementById('cfg-status');
+  el.innerHTML = '<div class="alert info"><span class="spinner"></span>연결 테스트 중...</div>';
+  try {
+    const res = await fetch(`${url}/rest/v1/trainings?limit=1`, {
+      headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
+    });
+    if (res.ok) {
+      el.innerHTML = '<div class="alert success">✅ 연결 성공! 테이블이 정상적으로 확인되었습니다.</div>';
+    } else {
+      const e = await res.json().catch(()=>({}));
+      el.innerHTML = `<div class="alert error">❌ 오류: ${e.message || res.statusText}<br>스키마 SQL을 먼저 실행했는지 확인하세요.</div>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<div class="alert error">❌ 연결 실패: ${e.message}</div>`;
+  }
+}
+function copySchema() {
+  navigator.clipboard.writeText(SCHEMA_SQL).then(() => toast('SQL이 복사되었습니다'));
+}
+
+// ══════════════════════════════════════════
+//  TRAININGS
+// ══════════════════════════════════════════
+async function loadTrainings() {
+  try {
+    const data = await sbFetch('/trainings?select=*,attendances(count)&order=training_date.desc');
+    trainings = data || [];
+    renderTrainings();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function renderTrainings() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const filtered = trainings.filter(t => t.name.toLowerCase().includes(q));
+  document.getElementById('training-count').textContent = filtered.length;
+  const el = document.getElementById('training-list');
+  if (!filtered.length) {
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:12px;">교육이 없습니다</div>';
+    return;
+  }
+  el.innerHTML = filtered.map(t => {
+    const cnt = t.attendances?.[0]?.count || 0;
+    const isActive = selectedTraining?.id === t.id;
+    const isOpen = t.status === 'open';
+    const dateStr = new Date(t.training_date).toLocaleDateString('ko-KR', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    return `<div class="training-item${isActive?' active':''}" onclick="selectTraining('${t.id}')">
+      <button class="ti-del" onclick="event.stopPropagation();deleteTraining('${t.id}')">✕</button>
+      <div class="ti-title">${t.name}</div>
+      <div class="ti-date">📅 ${dateStr}${t.location ? ` · ${t.location}` : ''}</div>
+      <div class="ti-stats">
+        <span class="ti-badge present">출석 ${cnt}명</span>
+        <span class="ti-badge ${isOpen?'open':'closed'}">
+          <span class="status-dot ${isOpen?'open':'closed'}"></span>${isOpen?'진행중':'마감'}
+        </span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterTrainings() { renderTrainings(); }
+
+async function createTraining() {
+  const name = document.getElementById('reg-name').value.trim();
+  const date = document.getElementById('reg-date').value;
+  const loc  = document.getElementById('reg-location').value.trim();
+  if (!name || !date) { toast('교육명과 일시를 입력하세요'); return; }
+  try {
+    const data = await sbFetch('/trainings', 'POST', { name, training_date: date, location: loc, status: 'open' });
+    toast('교육이 등록되었습니다');
+    document.getElementById('reg-name').value = '';
+    document.getElementById('reg-location').value = '';
+    await loadTrainings();
+    if (data?.[0]) selectTraining(data[0].id);
+  } catch(e) { toast('오류: ' + e.message); }
+}
+
+async function deleteTraining(id) {
+  if (!confirm('교육을 삭제하면 출석 데이터도 함께 삭제됩니다. 계속하시겠습니까?')) return;
+  try {
+    await sbFetch(`/trainings?id=eq.${id}`, 'DELETE');
+    if (selectedTraining?.id === id) clearSelection();
+    await loadTrainings();
+    toast('삭제되었습니다');
+  } catch(e) { toast('오류: ' + e.message); }
+}
+
+async function selectTraining(id) {
+  selectedTraining = trainings.find(t => t.id === id);
+  if (!selectedTraining) return;
+  renderTrainings();
+  showTrainingPanel();
+  await loadAttendance();
+}
+
+function clearSelection() {
+  selectedTraining = null;
+  document.getElementById('qr-placeholder').style.display = 'flex';
+  document.getElementById('qr-main').style.display = 'none';
+  document.getElementById('qrcode-wrapper').style.display = 'none';
+  document.getElementById('no-selection').style.display = 'flex';
+  document.getElementById('att-main').style.display = 'none';
+}
+
+function showTrainingPanel() {
+  const t = selectedTraining;
+  document.getElementById('qr-placeholder').style.display = 'none';
+  document.getElementById('qr-main').style.display = 'block';
+  document.getElementById('qr-training-name').textContent = t.name;
+  const dateStr = new Date(t.training_date).toLocaleString('ko-KR');
+  document.getElementById('qr-training-meta').textContent = `${dateStr}${t.location ? ' · ' + t.location : ''} · ${t.status === 'open' ? '📗 진행중' : '📕 마감'}`;
+  document.getElementById('btn-toggle-status').textContent = t.status === 'open' ? '⏸ 마감처리' : '▶ 재개';
+  document.getElementById('no-selection').style.display = 'none';
+  document.getElementById('att-main').style.display = 'flex';
+}
+
+async function toggleTraining() {
+  if (!selectedTraining) return;
+  const newStatus = selectedTraining.status === 'open' ? 'closed' : 'open';
+  try {
+    await sbFetch(`/trainings?id=eq.${selectedTraining.id}`, 'PATCH', { status: newStatus });
+    toast(newStatus === 'open' ? '출석을 재개했습니다' : '출석을 마감했습니다');
+    await loadTrainings();
+    showTrainingPanel();
+  } catch(e) { toast('오류: ' + e.message); }
+}
+
+// ══════════════════════════════════════════
+//  QR CODE
+// ══════════════════════════════════════════
+function generateQR() {
+  if (!selectedTraining) return;
+  const url = `${location.origin}${location.pathname}?training=${selectedTraining.id}`;
+  document.getElementById('qr-url-box').textContent = url;
+  document.getElementById('qr-url-box').style.display = 'block';
+
+  const wrapper = document.getElementById('qrcode-wrapper');
+  const container = document.getElementById('qrcode');
+  container.innerHTML = '';
+  wrapper.style.display = 'block';
+
+  new QRCode(container, {
+    text: url,
+    width: 140,
+    height: 140,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.H
+  });
+  toast('QR 코드가 생성되었습니다');
+}
+
+function downloadQR() {
+  const canvas = document.querySelector('#qrcode canvas');
+  if (!canvas) { toast('QR을 먼저 생성하세요'); return; }
+  const link = document.createElement('a');
+  link.download = `QR_${selectedTraining?.name || 'attendance'}.png`;
+  link.href = canvas.toDataURL();
+  link.click();
+}
+
+function copyURL() {
+  if (!selectedTraining) return;
+  const url = `${location.origin}${location.pathname}?training=${selectedTraining.id}`;
+  navigator.clipboard.writeText(url).then(() => toast('URL이 복사되었습니다'));
+}
+
+// ══════════════════════════════════════════
+//  ATTENDANCE
+// ══════════════════════════════════════════
+async function loadAttendance() {
+  if (!selectedTraining) return;
+  try {
+    const data = await sbFetch(`/attendances?training_id=eq.${selectedTraining.id}&order=checked_at.asc`);
+    attendances = data || [];
+    renderAttendance();
+  } catch(e) { toast('출석 로드 오류: ' + e.message); }
+}
+
+function renderAttendance() {
+  const total = attendances.length;
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-present').textContent = total;
+  document.getElementById('stat-rate').textContent = total > 0 ? '100%' : '0%';
+
+  const tbody = document.getElementById('att-tbody');
+  if (!total) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted);">출석 데이터가 없습니다</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = attendances.map((a, i) => {
+    const time = new Date(a.checked_at).toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
+    return `<tr>
+      <td style="color:var(--text-dim)">${i+1}</td>
+      <td><strong>${a.name}</strong></td>
+      <td>${a.department || '-'}</td>
+      <td>${a.rank || '-'}</td>
+      <td>${time}</td>
+      <td><span class="badge-present">출석</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function exportCSV() {
+  if (!attendances.length) { toast('출석 데이터가 없습니다'); return; }
+  const rows = [['번호','이름','소속','계급','사번','출석시간']];
+  attendances.forEach((a, i) => {
+    rows.push([i+1, a.name, a.department||'', a.rank||'', a.employee_id||'', new Date(a.checked_at).toLocaleString('ko-KR')]);
+  });
+  const csv = '\uFEFF' + rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `출석부_${selectedTraining?.name || ''}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// ══════════════════════════════════════════
+//  ATTENDANCE INPUT PAGE
+// ══════════════════════════════════════════
+function openAttInputPreview() {
+  if (!selectedTraining) return;
+  const t = selectedTraining;
+  document.getElementById('aip-title').textContent = t.name;
+  const dateStr = new Date(t.training_date).toLocaleString('ko-KR');
+  document.getElementById('aip-meta').textContent = `${dateStr}${t.location ? ' · ' + t.location : ''}`;
+  document.getElementById('aip-name').value = '';
+  document.getElementById('aip-dept').value = '';
+  document.getElementById('aip-rank').value = '';
+  document.getElementById('aip-id').value = '';
+  document.getElementById('aip-result').style.display = 'none';
+  document.getElementById('att-input-page').classList.add('show');
+}
+
+async function openAttInputByParam(trainingId) {
+  // QR 코드로 접속했을 때 출석 입력 페이지 바로 열기
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      const data = await sbFetch(`/trainings?id=eq.${trainingId}`);
+      const t = data?.[0];
+      if (t) {
+        selectedTraining = t;
+        document.getElementById('aip-title').textContent = t.name;
+        const dateStr = new Date(t.training_date).toLocaleString('ko-KR');
+        document.getElementById('aip-meta').textContent = `${dateStr}${t.location ? ' · ' + t.location : ''}`;
+        document.getElementById('att-input-page').classList.add('show');
+        document.getElementById('header').style.display = 'none';
+        document.getElementById('app').style.display = 'none';
+      }
+    } catch(e) {
+      // API 없으면 설정 요청
+      openSettings();
+    }
+  } else {
+    // API 설정 없으면 훈련 ID만 임시 저장 후 설정 열기
+    selectedTraining = { id: trainingId };
+    openSettings();
+  }
+}
+
+async function submitAttendance() {
+  const name = document.getElementById('aip-name').value.trim();
+  const dept = document.getElementById('aip-dept').value.trim();
+  const rank = document.getElementById('aip-rank').value.trim();
+  const empId = document.getElementById('aip-id').value.trim();
+  const resultEl = document.getElementById('aip-result');
+
+  if (!name) {
+    showAipResult('error', '이름을 입력해주세요');
+    return;
+  }
+  if (!selectedTraining) {
+    showAipResult('error', '교육 정보를 불러올 수 없습니다');
+    return;
+  }
+
+  // 마감 확인
+  if (selectedTraining.status === 'closed') {
+    showAipResult('error', '이 교육은 출석이 마감되었습니다');
+    return;
+  }
+
+  try {
+    await sbFetch('/attendances', 'POST', {
+      training_id: selectedTraining.id,
+      name, department: dept, rank, employee_id: empId
+    });
+    showAipResult('success', `✅ ${name}님의 출석이 확인되었습니다!`);
+    document.getElementById('aip-name').value = '';
+    document.getElementById('aip-dept').value = '';
+    document.getElementById('aip-rank').value = '';
+    document.getElementById('aip-id').value = '';
+    // 출석 현황 갱신
+    if (document.getElementById('att-main').style.display !== 'none') loadAttendance();
+  } catch(e) {
+    if (e.message.includes('duplicate') || e.message.includes('unique')) {
+      showAipResult('error', '이미 출석 처리된 기록이 있습니다');
+    } else {
+      showAipResult('error', '오류: ' + e.message);
+    }
+  }
+}
+
+function showAipResult(type, msg) {
+  const el = document.getElementById('aip-result');
+  el.className = type;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function closeAttInputPage() {
+  document.getElementById('att-input-page').classList.remove('show');
+  // 출석 현황 새로고침
+  if (selectedTraining && document.getElementById('att-main').style.display !== 'none') {
+    loadAttendance();
+  }
+}
+
+// ══════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
